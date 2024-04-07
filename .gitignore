@@ -1,8 +1,7 @@
 /.cache
-/CMakeLists.txt
-/README.md
 /build
 /pytest_hello_world.py
 /sdkconfig
 /sdkconfig.ci
 /sdkconfig.old
+/.vscode

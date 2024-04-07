@@ -8,6 +8,7 @@
 #include "mqtt_publish.h"
 #include "my_iic.h"
 #include "driver/adc.h"
+#include "esp_adc/adc_oneshot.h"
 
 static const char*  TAG  = "COMMON_SENSOR";
 
@@ -22,6 +23,15 @@ static const char*  TAG  = "COMMON_SENSOR";
 #define GXHT30_ADDRESS 0x44 
 #define HIGH_OPEN_ONETIME_MODE 0x2C06
 #define HIGH_CLOSE_ONETIME_MODE 0X2400
+
+// below define ADC-related constants
+#define ADC1_CHAN0          ADC_CHANNEL_2
+#define ADC1_CHAN1          ADC_CHANNEL_3
+
+
+#define ADC_ATTEN           ADC_ATTEN_DB_12
+
+static adc_oneshot_unit_handle_t adc1_handle;
 
 
 //下面是数据转换函数，将raw data进行转换
@@ -41,7 +51,7 @@ static esp_err_t i2c_master_gy30_write(i2c_port_t i2c_num, uint8_t i2c_write)
     i2c_master_write_byte(cmd, BH1750_ADDRESS << 1 | WRITE_BIT, ACK_CHECK_EN);
     i2c_master_write_byte(cmd, i2c_write, ACK_CHECK_EN);
     i2c_master_stop(cmd);
-    ret = i2c_master_cmd_begin(i2c_num, cmd, 1000 / portTICK_RATE_MS);
+    ret = i2c_master_cmd_begin(i2c_num, cmd, 1000 / portTICK_PERIOD_MS);
     i2c_cmd_link_delete(cmd);
 
     return ret;                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
@@ -56,7 +66,7 @@ static esp_err_t i2c_master_gy30_read(i2c_port_t i2c_num, uint8_t *data, size_t 
     i2c_master_write_byte(cmd, BH1750_ADDRESS << 1 | READ_BIT, ACK_CHECK_EN);
     i2c_master_read(cmd, data, data_len, LAST_NACK_VAL);
     i2c_master_stop(cmd);
-    ret = i2c_master_cmd_begin(i2c_num, cmd, 1000 / portTICK_RATE_MS);
+    ret = i2c_master_cmd_begin(i2c_num, cmd, 1000 / portTICK_PERIOD_MS);
     i2c_cmd_link_delete(cmd);
 
     return ret;
@@ -71,7 +81,7 @@ static esp_err_t i2c_master_gxht30_write(i2c_port_t i2c_num, uint16_t i2c_write)
     i2c_master_write_byte(cmd, i2c_write>>8, ACK_CHECK_EN);
     i2c_master_write_byte(cmd, i2c_write&0xff, ACK_CHECK_EN);
     i2c_master_stop(cmd);
-    ret = i2c_master_cmd_begin(i2c_num, cmd, 1000 / portTICK_RATE_MS);
+    ret = i2c_master_cmd_begin(i2c_num, cmd, 1000 / portTICK_PERIOD_MS);
     i2c_cmd_link_delete(cmd);
     return ret;
 }
@@ -85,22 +95,27 @@ static esp_err_t i2c_master_gxht30_read(i2c_port_t i2c_num, uint8_t *data, size_
     i2c_master_write_byte(cmd, GXHT30_ADDRESS << 1 | READ_BIT, ACK_CHECK_EN);
     i2c_master_read(cmd, data, data_len, LAST_NACK_VAL);
     i2c_master_stop(cmd);
-    ret = i2c_master_cmd_begin(i2c_num, cmd, 1000 / portTICK_RATE_MS);
+    ret = i2c_master_cmd_begin(i2c_num, cmd, 1000 / portTICK_PERIOD_MS);
     i2c_cmd_link_delete(cmd);
 
     return ret;
 }
 
-
 static void moisture_init(){
-    // 1. init adc
-    adc_config_t adc_config;
+    
+    adc_oneshot_unit_init_cfg_t init_config1 = {
+        .unit_id = ADC_UNIT_1,
+    };
+    ESP_ERROR_CHECK(adc_oneshot_new_unit(&init_config1, &adc1_handle));
 
-    // Depend on menuconfig->Component config->PHY->vdd33_const value
-    // When measuring system voltage(ADC_READ_VDD_MODE), vdd33_const must be set to 255.
-    adc_config.mode = ADC_READ_TOUT_MODE;
-    adc_config.clk_div = 8; // ADC sample collection clock = 80MHz/clk_div = 10MHz
-    ESP_ERROR_CHECK(adc_init(&adc_config));
+    //-------------ADC1 Config---------------//
+    adc_oneshot_chan_cfg_t config = {
+        .bitwidth = ADC_BITWIDTH_DEFAULT,
+        .atten = ADC_ATTEN,
+    };
+    ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, ADC1_CHAN0, &config));
+    ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, ADC1_CHAN1, &config));
+
 }
 
 
@@ -117,32 +132,32 @@ void commonSensor_task(void *arg)
         ret = i2c_master_gy30_read(I2C_MASTER_NUM, sensor_data, 2);
         if(ret==ESP_OK){
             pSensorData->lightTensity = ((sensor_data[0]<<8)|(sensor_data[1]))/1.2;
-            // ESP_LOGI(TAG,"The tensity of the light is %d.",pSensorData->lightTensity);
+            ESP_LOGI(TAG,"The tensity of the light is %d.",pSensorData->lightTensity);
         }else{
             ESP_LOGW(TAG,"gy30Detect Error.");
         }
-        vTaskDelay(1000 / portTICK_RATE_MS);
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
 
         memset(sensor_data, 0, 6);
         i2c_master_gxht30_write(I2C_MASTER_NUM,HIGH_CLOSE_ONETIME_MODE);
-        vTaskDelay(200 / portTICK_RATE_MS);
+        vTaskDelay(200 / portTICK_PERIOD_MS);
         ret = i2c_master_gxht30_read(I2C_MASTER_NUM, sensor_data, 6);
         if(ret==ESP_OK){
             pSensorData->temperature = DATA_CONVENTION_TO_CELSIUS((sensor_data[0]<<8)|sensor_data[1]);
-            // ESP_LOGI(TAG,"The temperature is %d.",pSensorData->temperature);
+            ESP_LOGI(TAG,"The temperature is %d.",pSensorData->temperature);
             pSensorData->humidity = DATA_CONVENTION_TO_HUMIDITY((sensor_data[3]<<8)|sensor_data[4]);
-            // ESP_LOGI(TAG,"The humidity is %d.",pSensorData->humidity);
+            ESP_LOGI(TAG,"The humidity is %d.",pSensorData->humidity);
         }else{
             ESP_LOGW(TAG,"gxht30 Detect Error.");
         }
-        vTaskDelay(1000 / portTICK_RATE_MS);
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
 
-        if (ESP_OK == adc_read((uint16_t*)&(pSensorData->soilMoisture))) {
-            //ESP_LOGI(TAG, "adc read: %d\r\n", pSensorData->soilMoisture);
+        if (ESP_OK == adc_oneshot_read(adc1_handle, ADC1_CHAN0, &(pSensorData->soilMoisture))) {
+            ESP_LOGI(TAG, "adc read: %d\r\n", pSensorData->soilMoisture);
         }else{
             ESP_LOGW(TAG,"ADC READ ERROR");
         }
-        vTaskDelay(1000 / portTICK_RATE_MS);
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
     i2c_driver_delete(I2C_MASTER_NUM);
 }

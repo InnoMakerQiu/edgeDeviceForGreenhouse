@@ -7,6 +7,7 @@
    CONDITIONS OF ANY KIND, either express or implied.
 */
 
+#include <stdint.h>
 #include <stdio.h>
 #include <stddef.h>
 #include <stdlib.h>
@@ -28,6 +29,7 @@
 #include "mqtt_event.h"
 #include "mqtt_publish.h"
 #include "commonSensor.h"
+#include "protocol_examples_common.h"
 
 
 static const char* TAG = "Main";
@@ -41,12 +43,12 @@ QueueHandle_t controlQueue;
 char* stepper1_device_str = "roller_1";
 char* relay1_device_str = "waterPump_1";
 char* relay2_device_str = "fan_1";
-char* majorDeviceId = "esp8266_1";
+char* majorDeviceId = "esp32c3_1";
 
-char* resultTopic = "/executionResult/upload/esp8266_1";
-char* statusTopic = "/status/upload/esp8266_1";
-char* commandTopic = "/command/send/esp8266_1";
-char* sensorDataTopic = "/data/upload/esp8266_1";
+char* resultTopic = "/executionResult/upload/es32c3_1";
+char* statusTopic = "/status/upload/esp32c3_1";
+char* commandTopic = "/command/send/esp32c3_1";
+char* sensorDataTopic = "/data/upload/esp32c3_1";
 
 void app_main(void)
 {
@@ -66,14 +68,15 @@ void app_main(void)
     pSensorData = malloc(sizeof(SensorData));
     memset(pSensorData,0,sizeof(SensorData));
     
-    wifi_init_sta();
+    //wifi_init_sta();
+    ESP_ERROR_CHECK(example_connect());
 
-    mqtt_app_start();
+   mqtt_app_start();
     i2c_master_init();
     
     xTaskCreate(control_task,"controlTask",2024,NULL,10,NULL);
-    xTaskCreate(commonSensor_task,"commonSensor_task",2024,NULL,5,NULL);
-    xTaskCreate(sgp30_task,"sgp30_task",2024,NULL,4,NULL);
+    // xTaskCreate(commonSensor_task,"commonSensor_task",2024,NULL,5,NULL);
+    // xTaskCreate(sgp30_task,"sgp30_task",2024,NULL,4,NULL);
     xTaskCreate(mqtt_publish_data_task,"mqtt_publish_data_task",2024,NULL,3,NULL);
 }
 

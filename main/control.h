@@ -1,7 +1,7 @@
 #ifndef CONTROL_H
 #define CONTROL_H
-#include "FreeRTOS.h"
-#include "queue.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
 
 // 定义消息队列句柄
 extern QueueHandle_t controlQueue;

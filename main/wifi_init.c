@@ -1,11 +1,15 @@
-#include <stdio.h>
-#include <stddef.h>
 #include <string.h>
-#include "esp_wifi.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "freertos/event_groups.h"
-#include "esp_log.h"
+#include "esp_system.h"
 #include "esp_wifi.h"
+#include "esp_event.h"
 #include "esp_log.h"
+#include "nvs_flash.h"
+
+#include "lwip/err.h"
+#include "lwip/sys.h"
 
 #define EXAMPLE_ESP_WIFI_SSID      "ACCOMPANY_206"
 #define EXAMPLE_ESP_WIFI_PASS      "206206206"
@@ -43,8 +47,8 @@ static void event_handler(void* arg, esp_event_base_t event_base,
         ESP_LOGI(TAG,"connect to the AP fail");
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
-        ESP_LOGI(TAG, "got ip:%s",
-                 ip4addr_ntoa(&event->ip_info.ip));
+        ESP_LOGI(TAG, "got ip:"IPSTR,
+                 IP2STR(&event->ip_info.ip));
         s_retry_num = 0;
         xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
     }
@@ -53,8 +57,6 @@ static void event_handler(void* arg, esp_event_base_t event_base,
 void wifi_init_sta(void)
 {
     s_wifi_event_group = xEventGroupCreate();
-
-    tcpip_adapter_init();
 
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
@@ -107,3 +109,5 @@ void wifi_init_sta(void)
     ESP_ERROR_CHECK(esp_event_handler_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, &event_handler));
     vEventGroupDelete(s_wifi_event_group);
 }
+
+
